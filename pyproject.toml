@@ -1,0 +1,24 @@
+[project]
+name = "alfred-agent"
+version = "0.1.0"
+description = "Alfred — a desktop agent that actually clicks for you. Cross-platform."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic>=0.40.0",
+    "pyautogui>=0.9.54",
+    "mss>=9.0.1",
+    "pynput>=1.7.7",
+    "PyQt6>=6.7.0",
+    "Pillow>=10.0.0",
+]
+
+[project.scripts]
+alfred = "alfred.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["alfred"]
