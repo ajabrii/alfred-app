@@ -5,8 +5,12 @@
   • macOS   → `Alfred.app` bundle
 Run from the repo root:  pyinstaller packaging/alfred.spec
 """
+import os
 import sys
 from PyInstaller.utils.hooks import collect_all
+
+# SPECPATH is the spec's own directory (packaging/); the app lives one level up.
+ROOT = os.path.dirname(SPECPATH)
 
 datas, binaries, hiddenimports = [], [], []
 for pkg in ("pyautogui", "pynput", "mss", "anthropic", "PyQt6"):
@@ -16,8 +20,8 @@ for pkg in ("pyautogui", "pynput", "mss", "anthropic", "PyQt6"):
     hiddenimports += h
 
 a = Analysis(
-    ["run_alfred.py"],
-    pathex=["."],
+    [os.path.join(ROOT, "run_alfred.py")],
+    pathex=[ROOT],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,

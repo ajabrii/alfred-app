@@ -4,8 +4,16 @@ A desktop agent that actually clicks for you. Tell Alfred what you want —
 "book my swim," "clean up my downloads folder," "reply to the last email" — and
 it looks at your screen and does it, on macOS, Windows, or Linux.
 
-Alfred uses Claude's computer-use through **your own Anthropic API key**: you pay
-Anthropic directly for what Alfred does, and your key stays on your machine.
+Alfred runs on the AI **you already have**. Pick your brain in setup:
+
+| Backend | What it uses | Need a key? |
+|---------|--------------|-------------|
+| **Claude Code CLI** | your logged-in `claude` | No |
+| **Codex CLI** | your logged-in `codex` | No |
+| **Claude API key** | the Anthropic API directly | Yes (you paste one) |
+
+If you already use the `claude` or `codex` command, Alfred just borrows it — no
+API keys, nothing extra to pay for beyond the subscription you already have.
 
 ---
 
@@ -40,8 +48,9 @@ to see and control the screen — macOS will prompt you; grant both in
 
 ## Using Alfred
 
-1. On first launch, Alfred asks for your **Anthropic API key**
-   (get one at <https://console.anthropic.com/settings/keys>). It's saved locally.
+1. On first launch, Alfred asks **which AI to use** — Claude CLI, Codex CLI, or an
+   Anthropic API key. It auto-detects which CLIs you already have. Your choice
+   (and a key, only if you picked that option) is saved locally.
 2. Alfred lives in your menu bar / system tray. Press **Ctrl+Space** (the default
    hotkey) to summon the bar, type what you want, and hit Enter.
 3. Watch it work. Press **Esc** or **stop** to halt it at any time.
@@ -59,7 +68,7 @@ python -m venv .venv
 source .venv/bin/activate         # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-python -m alfred setup            # save your API key
+python -m alfred setup            # choose your AI backend (Claude CLI / Codex CLI / API key)
 python -m alfred                  # launch the assistant
 python -m alfred run "open my calendar"   # one task, headless
 ```

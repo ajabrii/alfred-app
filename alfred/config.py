@@ -12,10 +12,21 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 APP = "Alfred"
-# The model Alfred uses to see the screen and decide what to click. Default to
-# Claude Sonnet 5.5 — Anthropic's strongest/cheapest tier for computer use, which
-# matters because each user pays for their own usage. Override in the config file
-# (e.g. "claude-opus-5-5") or via the ALFRED_MODEL env var.
+
+# Alfred's "brain" can be one of several backends. The CLI backends use a coding
+# CLI the friend already has logged in (no API key needed); the API backend talks
+# to Anthropic directly with a key the friend pastes in.
+BACKENDS = {
+    "claude-cli": "Claude Code CLI  (uses your logged-in `claude`)",
+    "codex-cli":  "Codex CLI        (uses your logged-in `codex`)",
+    "claude-api": "Claude API key   (paste an Anthropic key)",
+}
+CLI_BACKENDS = {"claude-cli", "codex-cli"}
+API_BACKENDS = {"claude-api"}
+
+# Model used only by the API backend. Claude Sonnet 5.5 — Anthropic's strongest,
+# cheapest tier for this kind of work. CLI backends use whatever model that CLI is
+# configured with. Override via the config file or the ALFRED_MODEL env var.
 DEFAULT_MODEL = "claude-sonnet-5-5"
 DEFAULT_HOTKEY = "<ctrl>+<space>"
 
@@ -37,7 +48,8 @@ def config_path() -> Path:
 
 @dataclass
 class Config:
-    api_key: str = ""
+    backend: str = ""           # one of BACKENDS
+    api_key: str = ""           # only for API backends
     model: str = DEFAULT_MODEL
     hotkey: str = DEFAULT_HOTKEY
     # Alfred pauses and asks before anything destructive (buying, sending,
@@ -46,8 +58,12 @@ class Config:
 
     @property
     def ready(self) -> bool:
-        """Has the user finished setup (given us a key)?"""
-        return bool(self.api_key.strip())
+        """Has the user finished setup — picked a backend (and a key if it needs one)?"""
+        if self.backend not in BACKENDS:
+            return False
+        if self.backend in API_BACKENDS:
+            return bool(self.api_key.strip())
+        return True  # CLI backends: the CLI's presence is checked when Alfred runs
 
 
 def load() -> Config:
@@ -58,7 +74,7 @@ def load() -> Config:
         try:
             data = json.loads(path.read_text("utf-8"))
             if isinstance(data, dict):
-                for field in ("api_key", "model", "hotkey"):
+                for field in ("backend", "api_key", "model", "hotkey"):
                     if isinstance(data.get(field), str) and data[field]:
                         setattr(cfg, field, data[field])
                 if isinstance(data.get("confirm_risky_actions"), bool):

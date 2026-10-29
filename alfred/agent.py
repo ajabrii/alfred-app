@@ -1,56 +1,18 @@
-"""Alfred's brain: hand Claude a goal and the screen, let it drive.
+"""Alfred's loop: screenshot → ask the chosen brain for one action → do it → repeat.
 
-This is a Claude *computer-use* loop. Alfred doesn't guess pixels or script apps;
-Claude looks at a screenshot and calls member tools (`left_click`, `type`, `key`,
-`scroll`, `screenshot`, ...) which Alfred's `Screen` carries out on the real
-desktop. The same loop runs on macOS, Windows, and Linux because `Screen` is the
-only OS-specific part.
-
-Uses the GA computer toolset (`computer_toolset_20260801`) — no beta header, the
-action is the tool_use block's `name`, several calls can arrive per turn, and
-every tool_result must echo `"toolset_name": "computer"`.
+The brain is a `planners.Planner` (Claude CLI, Codex CLI, or the Anthropic API) —
+whichever the user picked in setup. The loop, the safety stops, and the actual
+mouse/keyboard work are the same no matter which brain is driving.
 """
 from __future__ import annotations
 
-import base64
 from typing import Callable
 
-import anthropic
-
 from .config import Config
+from .planners import Action, PlannerError, get_planner
 from .screen import Screen
 
-Event = Callable[[str, str], None]  # (kind, text) -> None, for the UI/CLI to show
-
-TOOLSET = "computer_toolset_20260801"
-CLICKS = {"left_click": ("left", 1), "right_click": ("right", 1),
-          "middle_click": ("middle", 1), "double_click": ("left", 2),
-          "triple_click": ("left", 3)}
-
-SYSTEM = """You are Alfred, a careful desktop assistant operating the user's REAL
-computer through screenshots and mouse/keyboard actions. The screen may be macOS,
-Windows, or Linux — look at the screenshot to tell which, and use that OS's
-conventions (menus, shortcuts, window controls).
-
-How to work:
-- Take a screenshot whenever you're unsure what's on screen. Look before you click.
-- Work in small, verifiable steps. After an action that changes the screen, take a
-  screenshot to confirm it did what you expected before continuing.
-- Prefer keyboard shortcuts and typing over hunting for tiny targets when it's reliable.
-- If something is ambiguous or you're blocked, stop and say so in plain words rather
-  than guessing.
-
-SAFETY — this is the user's real machine, not a sandbox:
-- Before any irreversible or high-stakes action — buying, paying, sending a message
-  or email, posting publicly, deleting data, submitting a form with personal details,
-  or confirming anything involving money — STOP. Do not perform it. Describe exactly
-  what you are about to do and why, and end your turn so the user can confirm. Only
-  proceed with such an action if the user's instruction already clearly authorized
-  that specific step.
-- Never enter passwords, card numbers, or other credentials yourself. If a step needs
-  one, stop and ask the user to type it.
-
-When the task is done, say briefly what you accomplished and stop."""
+Event = Callable[[str, str], None]  # (kind, text); kind in {action, say, error, thinking}
 
 
 class Stopped(Exception):
@@ -60,123 +22,87 @@ class Stopped(Exception):
 class Agent:
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
-        self.client = anthropic.Anthropic(api_key=cfg.api_key)
+        self.planner = get_planner(cfg)      # raises PlannerError if the backend isn't usable
         self.screen = Screen()
 
     def run(self, goal: str, on_event: Event | None = None,
             should_stop: Callable[[], bool] | None = None, max_steps: int = 40) -> str:
-        """Carry out `goal`, returning Alfred's final message. `on_event` receives
-        ("thinking"|"action"|"say"|"error", text) as it works; `should_stop` is
-        polled between steps so the UI can cancel."""
         say = on_event or (lambda *_: None)
         stop = should_stop or (lambda: False)
+        history: list[str] = []
 
-        tools = [{"type": TOOLSET, "configs": {"zoom": {"enabled": False}}}]
-        shot = self.screen.grab()
-        messages = [{"role": "user", "content": [
-            {"type": "text", "text":
-                f"Here is the current screen ({shot.width}x{shot.height}). "
-                f"Please do this: {goal}"},
-            _image(shot.png),
-        ]}]
-
-        final = ""
         for _ in range(max_steps):
             if stop():
                 raise Stopped()
-            resp = self.client.messages.create(
-                model=self.cfg.model, max_tokens=8192, system=SYSTEM,
-                tools=tools, messages=messages,
-            )
-            messages.append({"role": "assistant", "content": resp.content})
+            shot = self.screen.grab()
+            say("thinking", "looking at the screen…")
+            try:
+                act = self.planner.plan(goal, shot, history)
+            except PlannerError as e:
+                say("error", str(e))
+                raise
+            if stop():
+                raise Stopped()
 
-            calls = []
-            for block in resp.content:
-                if block.type == "text" and block.text.strip():
-                    final = block.text.strip()
-                    say("say", final)
-                elif block.type == "tool_use":
-                    calls.append(block)
+            if act.action == "done":
+                msg = act.message or "Done."
+                say("say", msg)
+                return msg
+            if act.action == "ask":
+                msg = act.message or "I need you to take it from here."
+                say("say", msg)
+                return msg
 
-            if not calls:  # end_turn — Alfred finished or is waiting on the user
-                return final
-
-            results, failed = [], False
-            for block in calls:
-                if failed:
-                    results.append(_result(block.id, text="Not executed: an earlier "
-                                           "action this turn failed.", error=True))
-                    continue
-                if stop():
-                    raise Stopped()
-                try:
-                    kind, payload = self._do(block.name, block.input or {}, say)
-                    if kind == "image":
-                        results.append(_result(block.id, image=payload))
-                    else:
-                        results.append(_result(block.id, text=payload))
-                except Exception as e:  # noqa: BLE001 — report the failure to Claude
-                    say("error", f"{block.name}: {e}")
-                    results.append(_result(block.id, text=f"Action failed: {e}", error=True))
-                    failed = True
-            messages.append({"role": "user", "content": results})
+            say("action", _describe(act))
+            try:
+                self._apply(act)
+                history.append(_describe(act))
+            except Exception as e:  # noqa: BLE001 — tell the brain the step failed, keep going
+                say("error", f"{act.action}: {e}")
+                history.append(f"(tried {act.action} but it failed: {e})")
 
         say("say", "Reached the step limit for this task — stopping here.")
-        return final or "Reached the step limit for this task."
+        return "Reached the step limit for this task."
 
-    def _do(self, name: str, inp: dict, say: Event):
-        """Execute one computer member tool; return ("image", png) or ("text", str)."""
+    def _apply(self, a: Action) -> None:
         s = self.screen
-        coord = inp.get("coordinate")
-        mods = tuple(inp["text"].split("+")) if inp.get("text") and name in CLICKS else ()
-
-        if name == "screenshot":
-            return "image", s.grab().png
-        if name in CLICKS:
-            button, count = CLICKS[name]
-            say("action", f"{name} at {coord}" if coord else name)
-            s.click(coord, button=button, count=count, modifiers=mods)
-        elif name == "mouse_move":
-            s.move(coord)
-        elif name == "left_mouse_down":
-            s.mouse_down()
-        elif name == "left_mouse_up":
-            s.mouse_up()
-        elif name == "left_click_drag":
-            say("action", f"drag {inp.get('start_coordinate')} -> {coord}")
-            s.drag(inp["start_coordinate"], coord)
-        elif name == "cursor_position":
-            return "text", f"cursor at {s.cursor()}"
-        elif name == "scroll":
-            s.scroll(inp.get("scroll_direction", "down"), inp.get("scroll_amount", 3), coord)
-        elif name == "type":
-            say("action", f'type "{_short(inp.get("text", ""))}"')
-            s.type_text(inp.get("text", ""))
-        elif name == "key":
-            say("action", f'key {inp.get("text", "")}')
-            s.key(inp.get("text", ""), int(inp.get("repeat", 1)))
-        elif name == "hold_key":
-            s.hold_key(inp.get("text", ""), inp.get("duration", 1))
-        elif name == "wait":
-            s.wait(inp.get("duration", 1))
+        xy = (a.x, a.y) if a.x is not None and a.y is not None else None
+        if a.action == "click":
+            s.click(xy)
+        elif a.action == "double_click":
+            s.click(xy, count=2)
+        elif a.action == "right_click":
+            s.click(xy, button="right")
+        elif a.action == "move":
+            s.move(xy)
+        elif a.action == "drag" and xy and a.x2 is not None and a.y2 is not None:
+            s.drag(xy, (a.x2, a.y2))
+        elif a.action == "type":
+            s.type_text(a.text)
+        elif a.action == "key":
+            s.key(a.text)
+        elif a.action == "scroll":
+            s.scroll(a.direction, a.amount, xy)
+        elif a.action == "wait":
+            s.wait(a.amount)
         else:
-            return "text", f"Unknown action '{name}' — skipped."
-        return "text", "OK"
+            raise ValueError(f"don't know how to do '{a.action}'")
 
 
-def _image(png: bytes) -> dict:
-    return {"type": "image", "source": {"type": "base64", "media_type": "image/png",
-                                        "data": base64.standard_b64encode(png).decode()}}
-
-
-def _result(tool_use_id: str, *, text: str | None = None,
-            image: bytes | None = None, error: bool = False) -> dict:
-    content = [_image(image)] if image is not None else [{"type": "text", "text": text}]
-    r = {"type": "tool_result", "tool_use_id": tool_use_id,
-         "toolset_name": "computer", "content": content}
-    if error:
-        r["is_error"] = True
-    return r
+def _describe(a: Action) -> str:
+    if a.action in ("click", "double_click", "right_click", "move"):
+        return f"{a.action.replace('_', ' ')} ({a.x}, {a.y})"
+    if a.action == "drag":
+        return f"drag ({a.x},{a.y}) → ({a.x2},{a.y2})"
+    if a.action == "type":
+        return f'type "{_short(a.text)}"'
+    if a.action == "key":
+        return f"press {a.text}"
+    if a.action == "scroll":
+        return f"scroll {a.direction} {a.amount}"
+    if a.action == "wait":
+        return f"wait {a.amount}s"
+    return a.action
 
 
 def _short(text: str, n: int = 50) -> str:

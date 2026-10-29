@@ -14,23 +14,49 @@ from . import __version__, config
 
 
 def _setup() -> config.Config:
+    from .planners import available_backends
     cfg = config.load()
-    print("Alfred needs your own Anthropic API key (you pay Anthropic directly for\n"
-          "what Alfred does). Get one at https://console.anthropic.com/settings/keys\n")
-    if cfg.api_key:
-        print("A key is already saved. Press Enter to keep it, or paste a new one.")
+    avail = available_backends()
+
+    print("Which AI should Alfred use? Pick one you have:\n")
+    keys = list(config.BACKENDS)
+    for i, k in enumerate(keys, 1):
+        mark = "✓ found" if avail.get(k) else "— not detected"
+        here = "  (current)" if k == cfg.backend else ""
+        print(f"  {i}. {config.BACKENDS[k]}   [{mark}]{here}")
+    print()
     try:
-        key = getpass.getpass("Anthropic API key (hidden): ").strip()
+        choice = input(f"Enter 1-{len(keys)}: ").strip()
     except (EOFError, KeyboardInterrupt):
         print("\nCancelled.")
         sys.exit(1)
-    if key:
-        cfg.api_key = key
-    if not cfg.api_key:
-        print("No key given — setup not complete.")
+    if not (choice.isdigit() and 1 <= int(choice) <= len(keys)):
+        print("Not a valid choice.")
         sys.exit(1)
+    cfg.backend = keys[int(choice) - 1]
+
+    if cfg.backend in config.API_BACKENDS:
+        print("\nPaste your Anthropic API key (you pay Anthropic directly for usage).\n"
+              "Get one at https://console.anthropic.com/settings/keys")
+        if cfg.api_key:
+            print("A key is already saved — press Enter to keep it, or paste a new one.")
+        try:
+            key = getpass.getpass("Anthropic API key (hidden): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nCancelled.")
+            sys.exit(1)
+        if key:
+            cfg.api_key = key
+        if not cfg.api_key:
+            print("No key given — setup not complete.")
+            sys.exit(1)
+    elif not avail.get(cfg.backend):
+        cli = "claude" if cfg.backend == "claude-cli" else "codex"
+        print(f"\nHeads up: the `{cli}` command isn't on your PATH yet. Install it and "
+              f"log in (`{cli}` once, or `{cli} login`), then Alfred will use it.")
+
     config.save(cfg)
-    print(f"Saved to {config.config_path()}. You're set — run `alfred` to start.")
+    print(f"\nSaved to {config.config_path()}. You're set — run `alfred` to start.")
     return cfg
 
 
