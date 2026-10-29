@@ -186,6 +186,15 @@ def _tray(app: QtWidgets.QApplication, bar: Bar) -> QtWidgets.QSystemTrayIcon:
     tray = QtWidgets.QSystemTrayIcon(QtGui.QIcon(pix), app)
     menu = QtWidgets.QMenu()
     menu.addAction("Summon Alfred", bar.summon)
+    def setup():
+        if bar.worker and bar.worker.isRunning():
+            QtWidgets.QMessageBox.information(bar, 'Finish your task first', 'Stop the current task before changing your AI connection.')
+            return
+        from .setup_ui import SetupDialog
+        dialog = SetupDialog(bar.cfg)
+        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            bar.cfg = dialog.cfg
+    menu.addAction("Set up Alfred", setup)
     menu.addSeparator()
     menu.addAction("Quit", app.quit)
     tray.setContextMenu(menu)

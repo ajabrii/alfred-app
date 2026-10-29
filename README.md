@@ -1,90 +1,49 @@
 # Alfred
 
-A desktop agent that actually clicks for you. Tell Alfred what you want —
-"book my swim," "clean up my downloads folder," "reply to the last email" — and
-it looks at your screen and does it, on macOS, Windows, or Linux.
+A desktop assistant with a guided installer and setup wizard.
 
-Alfred runs on the AI **you already have**. Pick your brain in setup:
+**[Download Alfred](https://alfred-chi-five.vercel.app/setup.html)** · **[Help & docs](https://alfred-chi-five.vercel.app/docs.html)**
 
-| Backend | What it uses | Need a key? |
-|---------|--------------|-------------|
-| **Claude Code CLI** | your logged-in `claude` | No |
-| **Codex CLI** | your logged-in `codex` | No |
-| **Claude API key** | the Anthropic API directly | Yes (you paste one) |
+1. Download the installer for your computer and open it.
+2. Open Alfred. Choose Claude or ChatGPT / Codex and click **Install & connect**.
+3. Approve the provider's browser sign-in, check permissions, and click **Start Alfred**.
 
-If you already use the `claude` or `codex` command, Alfred just borrows it — no
-API keys, nothing extra to pay for beyond the subscription you already have.
+Alfred installs the official provider connection when missing. No terminal,
+Python, or Node installation is needed by the user. An eligible AI account is
+required; provider usage limits and billing apply. Existing connections are reused.
+An Anthropic API key is an advanced alternative. Antigravity is not implemented.
 
----
+## Installers
 
-## Install
+- Windows 10/11, Intel/AMD 64-bit: `.exe` installer, Start menu shortcut, uninstaller.
+- macOS 15+, Apple Silicon or Intel: `.pkg` installer into Applications.
+- Ubuntu 24.04+ / Debian 13+, Intel/AMD 64-bit: `.deb` package, app-menu entry.
+  Requires an X11 session and a graphical package installer. Other distributions,
+  ARM Linux and Wayland are not supported by this installer.
 
-Download the file for your computer from the
-[latest release](https://github.com/ajabrii/alfred-app/releases/latest):
-
-| OS | File |
-|----|------|
-| macOS (Apple Silicon) | `Alfred-macos-arm64.dmg` |
-| macOS (Intel) | `Alfred-macos-x86_64.dmg` |
-| Windows | `Alfred-windows-x86_64.exe` |
-| Linux | `Alfred-linux-x86_64` |
-
-### First launch — getting past the "unidentified developer" warning
-
-These early builds aren't code-signed yet, so your OS will warn you the first time.
-This is expected; here's how to open Alfred anyway:
-
-- **macOS:** open the `.dmg`, drag Alfred to Applications, then **right-click
-  Alfred → Open → Open**. (A plain double-click is blocked the first time.)
-- **Windows:** on the blue "Windows protected your PC" screen, click
-  **More info → Run anyway**.
-- **Linux:** `chmod +x Alfred-linux-x86_64 && ./Alfred-linux-x86_64`
-
-On macOS, Alfred also needs **Accessibility** and **Screen Recording** permission
-to see and control the screen — macOS will prompt you; grant both in
-*System Settings → Privacy & Security*, then relaunch.
-
----
+These preview packages are unsigned. See the docs for first-open instructions.
+CI validates the setup wizard and builds on each native platform; full real-device
+end-to-end onboarding is not verified on all systems.
 
 ## Using Alfred
 
-1. On first launch, Alfred asks **which AI to use** — Claude CLI, Codex CLI, or an
-   Anthropic API key. It auto-detects which CLIs you already have. Your choice
-   (and a key, only if you picked that option) is saved locally.
-2. Alfred lives in your menu bar / system tray. Press **Ctrl+Space** (the default
-   hotkey) to summon the bar, type what you want, and hit Enter.
-3. Watch it work. Press **Esc** or **stop** to halt it at any time.
+Type a small task such as “Open my browser.” Ctrl+Space summons Alfred.
+Use Stop in the bar to stop before the next action once an in-flight AI response
+returns. Use the tray menu to reopen setup or quit.
 
-**Preview limitations:** The model is instructed to ask before buying, sending,
-posting, deleting, or entering sensitive information. These are model instructions,
-not an enforced security boundary; supervise the app while it controls your screen.
+Supervise the app. Its AI is instructed to ask before sensitive actions, but that
+is not an enforced security boundary. Screenshots go to your selected AI provider
+during tasks. A directly entered API key is saved in a local settings file.
 
----
+## Development
 
-## Run from source / develop
+Use Python 3.12. Install `requirements.txt`, then run `python -m alfred`.
+Run setup tests with `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v`.
+Build with `pyinstaller --noconfirm packaging/alfred.spec`.
+The release workflow builds the native installers when a version tag is pushed.
 
-```bash
-python -m venv .venv
-source .venv/bin/activate         # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-
-python -m alfred setup            # choose your AI backend (Claude CLI / Codex CLI / API key)
-python -m alfred                  # launch the assistant
-python -m alfred run "open my calendar"   # one task, headless
-```
-
-## Build a native app yourself
-
-```bash
-pip install pyinstaller
-pyinstaller --noconfirm packaging/alfred.spec
-# -> dist/Alfred (Linux), dist/Alfred.exe (Windows), dist/Alfred.app (macOS)
-```
-
-CI (`.github/workflows/build.yml`) builds all four targets on real runners when you
-push a tag like `v0.1.0`, and publishes them to a GitHub Release.
-
----
-
-Not affiliated with Apple, Microsoft, OpenAI, or Anthropic. Alfred uses your
-chosen CLI or your own Anthropic API key.
+The `site/` folder contains the landing page, download guide and docs. Deploy only
+that folder to Vercel. Provider installer URLs and sign-in flows are based on:
+- https://learn.chatgpt.com/docs/cli
+- https://learn.chatgpt.com/docs/auth
+- https://code.claude.com/docs/en/setup

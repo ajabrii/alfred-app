@@ -37,6 +37,7 @@ _EXTRA_BINS = [
     Path.home() / ".local" / "bin",
     Path.home() / ".npm-global" / "bin",
     Path.home() / ".codex" / "bin",
+    Path(os.environ.get("LOCALAPPDATA", str(Path.home()/"AppData/Local"))) / "Programs/OpenAI/Codex/bin",
     Path.home() / ".claude" / "local",
     Path("/opt/homebrew/bin"),
     Path("/usr/local/bin"),

@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             label: linux-x86_64
           - os: windows-latest
             label: windows-x86_64
@@ -54,51 +54,76 @@ jobs:
       - name: Build
         run: pyinstaller --noconfirm packaging/alfred.spec
 
-      # ---- package one native artifact per OS ----
       - name: Package (Linux)
         if: runner.os == 'Linux'
-        run: |
-          chmod +x dist/Alfred
-          mv dist/Alfred "Alfred-${{ matrix.label }}"
+        run: PYTHONPATH=. python packaging/linux.py
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
-        run: Move-Item dist/Alfred.exe "Alfred-${{ matrix.label }}.exe"
         shell: pwsh
+        run: |
+          $env:ALFRED_VERSION = python -c "from alfred import __version__; print(__version__)"
+          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $compiler)) { choco install innosetup --yes --no-progress }
+          & $compiler packaging/windows.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
         run: |
-          hdiutil create -volname Alfred -srcfolder "dist/Alfred.app" \
-            -ov -format UDZO "Alfred-${{ matrix.label }}.dmg"
+          mkdir -p release
+          VERSION=$(python -c 'from alfred import __version__; print(__version__)')
+          pkgbuild --component dist/Alfred.app --install-location /Applications \
+            --identifier com.alfred.agent --version "$VERSION" \
+            "release/Alfred-Setup-${{ matrix.label }}.pkg"
+
+      - name: Verify Linux installer
+        if: runner.os == 'Linux'
+        run: |
+          dpkg-deb --info release/Alfred-ubuntu-debian-amd64.deb
+          dpkg-deb --extract release/Alfred-ubuntu-debian-amd64.deb /tmp/alfred-installed
+          /tmp/alfred-installed/opt/alfred/Alfred --version
+          test -f /tmp/alfred-installed/usr/share/applications/alfred.desktop
+
+      - name: Verify Windows install and uninstall
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP "alfred-install-test"
+          $install = Start-Process release/Alfred-Setup-windows-x86_64.exe -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$target" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Installer failed" }
+          if (!(Test-Path "$target/Alfred.exe")) { throw "App missing after install" }
+          $uninstall = Start-Process "$target/unins000.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "Uninstaller failed" }
+          if (Test-Path "$target/Alfred.exe") { throw "App remains after uninstall" }
+
+      - name: Verify Mac installer payload
+        if: runner.os == 'macOS'
+        run: |
+          pkgutil --payload-files "release/Alfred-Setup-${{ matrix.label }}.pkg" > payload.txt
+          grep 'Alfred.app/Contents/MacOS/Alfred' payload.txt
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: Alfred-${{ matrix.label }}
-          path: |
-            Alfred-${{ matrix.label }}
-            Alfred-${{ matrix.label }}.exe
-            Alfred-${{ matrix.label }}.dmg
+          path: release/*
           if-no-files-found: error
 
       - name: Attach to Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            Alfred-${{ matrix.label }}
-            Alfred-${{ matrix.label }}.exe
-            Alfred-${{ matrix.label }}.dmg
-          fail_on_unmatched_files: false
+          files: release/*
+          fail_on_unmatched_files: true
           body: |
-            Alfred ${{ github.ref_name }} — download the file for your OS:
-            • macOS (Apple Silicon): Alfred-macos-arm64.dmg
-            • macOS (Intel): Alfred-macos-x86_64.dmg
-            • Windows: Alfred-windows-x86_64.exe
-            • Linux: Alfred-linux-x86_64 (chmod +x, then run)
+            Download the installer for your computer, open it, and follow the setup wizard.
+            Windows: Alfred-Setup-windows-x86_64.exe
+            Mac (Apple Silicon): Alfred-Setup-macos-arm64.pkg
+            Mac (Intel): Alfred-Setup-macos-x86_64.pkg
+            Ubuntu / Debian (X11, 64-bit Intel/AMD): Alfred-ubuntu-debian-amd64.deb
 
-            First launch: your OS will warn it's from an unidentified developer
-            (these builds aren't code-signed yet). See the README for how to open
-            it anyway. On first run, choose Claude CLI, Codex CLI, or your own
-            Anthropic API key. CLI backends require the CLI installed and signed in.
+            Open Alfred from your applications after installation. Choose Claude or Codex,
+            click Install & connect, and approve the provider's browser sign-in.
+            These preview installers are not code-signed. See the website docs for
+            platform requirements, permissions and opening an unsigned installer.

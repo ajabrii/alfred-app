@@ -6,3 +6,7 @@ dist/
 *.spec.bak
 
 alfred-src.zip
+
+release/
+site/.vercel/
+node_modules/

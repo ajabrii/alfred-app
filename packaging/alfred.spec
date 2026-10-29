@@ -13,7 +13,7 @@ from PyInstaller.utils.hooks import collect_all
 ROOT = os.path.dirname(SPECPATH)
 
 datas, binaries, hiddenimports = [], [], []
-for pkg in ("pyautogui", "pynput", "mss", "anthropic", "PyQt6"):
+for pkg in ("pyautogui", "pynput", "mss", "anthropic", "PyQt6", "certifi"):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b
