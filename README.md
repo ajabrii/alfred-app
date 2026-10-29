@@ -20,7 +20,7 @@ API keys, nothing extra to pay for beyond the subscription you already have.
 ## Install
 
 Download the file for your computer from the
-[latest release](../../releases/latest):
+[latest release](https://github.com/ajabrii/alfred-app/releases/latest):
 
 | OS | File |
 |----|------|
@@ -55,9 +55,9 @@ to see and control the screen — macOS will prompt you; grant both in
    hotkey) to summon the bar, type what you want, and hit Enter.
 3. Watch it work. Press **Esc** or **stop** to halt it at any time.
 
-**Safety:** Alfred pauses and asks before anything irreversible — buying, sending,
-posting, deleting, or submitting personal details — and never types passwords or
-card numbers itself.
+**Preview limitations:** The model is instructed to ask before buying, sending,
+posting, deleting, or entering sensitive information. These are model instructions,
+not an enforced security boundary; supervise the app while it controls your screen.
 
 ---
 
@@ -86,5 +86,5 @@ push a tag like `v0.1.0`, and publishes them to a GitHub Release.
 
 ---
 
-Not affiliated with Apple, Microsoft, or Anthropic. Alfred is a client for the
-Anthropic API that you bring your own key to.
+Not affiliated with Apple, Microsoft, OpenAI, or Anthropic. Alfred uses your
+chosen CLI or your own Anthropic API key.
