@@ -24,7 +24,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .config import Config
-from .screen import Shot
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .screen import Shot
 
 STEP_TIMEOUT = 180  # seconds a single planning call may take
 

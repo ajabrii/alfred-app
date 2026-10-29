@@ -40,6 +40,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
 
+      - name: Test setup
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m unittest discover -s tests -v
+
       - name: Build
         run: pyinstaller --noconfirm packaging/alfred.spec
 

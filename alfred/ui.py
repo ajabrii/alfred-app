@@ -8,7 +8,6 @@ import sys
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
-from .agent import Agent, Stopped
 from .config import Config
 
 PAPER, INK, GOLD, MUTED = "#f7f1e4", "#231d14", "#d79a2b", "#8a7f6d"
@@ -27,6 +26,7 @@ class Worker(QtCore.QThread):
         self._stop = True
 
     def run(self) -> None:
+        from .agent import Agent, Stopped
         try:
             agent = Agent(self.cfg)
             result = agent.run(self.goal, on_event=self.event.emit,
@@ -197,6 +197,12 @@ def _tray(app: QtWidgets.QApplication, bar: Bar) -> QtWidgets.QSystemTrayIcon:
 def run_app(cfg: Config) -> int:
     app = QtWidgets.QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)  # live in the tray, not tied to the bar
+    if not cfg.ready:
+        from .setup_ui import SetupDialog
+        dialog = SetupDialog(cfg)
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return 0
+        cfg = dialog.cfg
     bar = Bar(cfg)
     bar._hotkey = _hotkey_listener(bar, cfg.hotkey)   # keep a ref alive
     bar._tray = _tray(app, bar)

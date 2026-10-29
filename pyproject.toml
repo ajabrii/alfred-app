@@ -1,6 +1,6 @@
 [project]
 name = "alfred-agent"
-version = "0.1.0"
+version = "0.1.1"
 description = "Alfred — a desktop agent that actually clicks for you. Cross-platform."
 readme = "README.md"
 requires-python = ">=3.10"

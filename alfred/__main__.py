@@ -96,9 +96,6 @@ def main() -> int:
         return _run_headless(goal)
 
     cfg = config.load()
-    if not cfg.ready:
-        print("Welcome to Alfred. Let's set up your API key.\n")
-        cfg = _setup()
     from .ui import run_app
     return run_app(cfg)
 
